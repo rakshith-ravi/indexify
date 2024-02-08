@@ -82,9 +82,26 @@ impl RaftApi for RaftGrpcServer {
         let ae_req = GrpcHelper::parse_req(request)?;
         let resp = self
             .raft
-            .append_entries(ae_req)
+            .append_entries(ae_req.clone())
             .await
             .map_err(GrpcHelper::internal_err)?;
+
+        self.raft
+            .is_leader()
+            .await
+            .ok_or(Status::unavailable("leader not found"))?;
+
+        _ = RaftApiClient::connect(format!(
+            "http://{}",
+            self.nodes
+                .get(&0)
+                .ok_or(Status::unavailable("leader not found"))?
+                .addr
+        ))
+        .await
+        .map_err(|message| Status::internal(message.to_string()))?
+        .forward(ae_req)
+        .await;
 
         GrpcHelper::ok_response(resp)
     }
