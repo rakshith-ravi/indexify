@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{stream::FuturesOrdered, StreamExt};
 use object_store::{aws::AmazonS3, ObjectStore};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 use super::{BlobStorageReader, BlobStorageWriter};
 
@@ -22,7 +23,13 @@ impl S3Storage {
 
 #[async_trait]
 impl BlobStorageWriter for S3Storage {
-    async fn put(&self, key: &str, data: Bytes) -> Result<String> {
+    async fn put(&self, key: &str, data: impl AsyncRead) -> Result<String> {
+        // Stream data to self.client
+        let (upload_id, writer) = self.client.put_multipart(&key.into()).await?;
+        let mut buffer = Vec::new();
+        while let Some(_) = data.read_buf(&mut buffer).await? {
+            writer.write_all(&buffer).await?;
+        }
         self.client.put(&key.into(), data).await?;
         Ok(format!("s3://{}/{}", self.bucket, key))
     }

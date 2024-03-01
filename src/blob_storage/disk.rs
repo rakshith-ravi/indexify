@@ -4,7 +4,7 @@ use bytes::Bytes;
 use futures::{stream::FuturesOrdered, StreamExt};
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
 };
 
 use super::{BlobStorageReader, BlobStorageWriter, DiskStorageConfig};
@@ -25,10 +25,13 @@ impl DiskStorage {
 #[async_trait]
 impl BlobStorageWriter for DiskStorage {
     #[tracing::instrument(skip(self))]
-    async fn put(&self, key: &str, data: Bytes) -> Result<String, anyhow::Error> {
+    async fn put(&self, key: &str, data: impl AsyncRead) -> Result<String, anyhow::Error> {
         let path = format!("{}/{}", self.config.path, key);
         let mut file = File::create(&path).await?;
-        file.write_all(&data).await?;
+        let mut buffer = Vec::new();
+        while let Some(_) = data.read_buf(&mut buffer).await? {
+            file.write_all(&buffer).await?;
+        }
         let path = format!("file://{}", path);
         Ok(path)
     }

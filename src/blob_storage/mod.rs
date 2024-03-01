@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use object_store::aws::AmazonS3Builder;
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncRead;
 
 pub mod disk;
 pub mod s3;
@@ -28,7 +29,7 @@ pub struct BlobStorageConfig {
 
 #[async_trait]
 pub trait BlobStorageWriter {
-    async fn put(&self, key: &str, data: Bytes) -> Result<String, anyhow::Error>;
+    async fn put(&self, key: &str, data: impl AsyncRead) -> Result<String, anyhow::Error>;
     async fn delete(&self, key: &str) -> Result<()>;
 }
 
@@ -113,7 +114,7 @@ impl BlobStorageReader for BlobStorage {
 
 #[async_trait]
 impl BlobStorageWriter for BlobStorage {
-    async fn put(&self, key: &str, data: Bytes) -> Result<String, anyhow::Error> {
+    async fn put(&self, key: &str, data: impl AsyncRead) -> Result<String, anyhow::Error> {
         if key.starts_with("s3://") {
             let (bucket, key) = parse_s3_url(key)
                 .map_err(|err| anyhow::anyhow!("unable to parse s3 url: {}", err))?;
